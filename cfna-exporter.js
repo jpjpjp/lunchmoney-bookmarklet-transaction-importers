@@ -1,4 +1,11 @@
 (() => {
+  const INSTITUTION = "cfna";
+  const SOURCE = "lm-bookmarklets";
+  const SOURCE_VERSION = "2.0.0";
+
+  // Lunch Money rejects custom_metadata larger than this.
+  const MAX_METADATA_BYTES = 4096;
+
   const extractRefId = (text) => {
     const m = (text || "").match(/Ref#\s*([A-Za-z0-9-]+)/i);
     return m ? m[1].trim() : "";
@@ -18,8 +25,44 @@
 
   const uniq = (arr) => [...new Set(arr.filter(Boolean).map((x) => x.trim()).filter(Boolean))];
 
+  const isEmptyValue = (v) =>
+    v === null ||
+    v === undefined ||
+    v === "" ||
+    (Array.isArray(v) && v.length === 0) ||
+    (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0);
+
+  // Only what the CFNA page actually provides beyond the fields Lunch Money
+  // already stores. The page exposes no account id, category, or transaction
+  // type, so those keys are simply absent rather than invented.
+  const buildMetadata = ({ cardholder, cleanedDetails, rawDate, rawAmount }) => {
+    const payload = {
+      cardholder,
+      detail_rows: cleanedDetails,
+      raw_date: rawDate,
+      raw_amount: rawAmount,
+    };
+    for (const k of Object.keys(payload)) {
+      if (isEmptyValue(payload[k])) delete payload[k];
+    }
+
+    if (!Object.keys(payload).length) return null;
+
+    const meta = {
+      source: SOURCE,
+      source_version: SOURCE_VERSION,
+      institution: INSTITUTION,
+      [INSTITUTION]: payload,
+    };
+    return JSON.stringify(meta).length > MAX_METADATA_BYTES ? null : meta;
+  };
+
+  // The account page shows a recent-activity widget; the transaction-history
+  // page renders one table per statement period. Both use the same row markup.
+  const ROW_SELECTOR = "#latest-account-transactions-table tbody tr, table.statement-table tbody tr";
+
   const parseDoc = (doc) => {
-    const rows = [...doc.querySelectorAll("#latest-account-transactions-table tbody tr")];
+    const rows = [...doc.querySelectorAll(ROW_SELECTOR)];
 
     return rows
       .map((tr) => {
@@ -51,7 +94,10 @@
 
         if (!date || !payee) return null;
 
-        return {
+        const rawDate = (tr.querySelector("td:nth-child(1)")?.innerText || "").replace(/\s+/g, " ").trim();
+        const rawAmount = (tr.querySelector("td:nth-child(4)")?.innerText || "").replace(/\s+/g, " ").trim();
+
+        const transaction = {
           date,
           payee,
           amount,
@@ -59,27 +105,53 @@
           external_id: external_id || undefined,
           status: "unreviewed",
         };
+
+        const metadata = buildMetadata({ cardholder, cleanedDetails, rawDate, rawAmount });
+        if (metadata) transaction.custom_metadata = metadata;
+
+        return transaction;
       })
       .filter(Boolean);
   };
 
-  const fetchAndParseFallback = async () => {
-    for (const ep of ["/cardholder/transaction-history", "/cardholder/latest-account-transactions"]) {
-      try {
-        const res = await fetch(ep, { credentials: "include" });
-        const html = await res.text();
-        const doc = new DOMParser().parseFromString(html, "text/html");
-        const txns = parseDoc(doc);
-        if (txns.length) return txns;
-      } catch (_) {
-        // Try next endpoint.
+  const fetchAndParse = async (endpoint) => {
+    try {
+      const res = await fetch(endpoint, { credentials: "include" });
+      const html = await res.text();
+      return parseDoc(new DOMParser().parseFromString(html, "text/html"));
+    } catch (_) {
+      return [];
+    }
+  };
+
+  // A Ref# is the reliable identity; fall back to the visible values so rows
+  // without one still dedupe rather than importing twice.
+  const dedupeKey = (t) => t.external_id || `${t.date}|${t.payee}|${t.amount}`;
+
+  const mergeTransactions = (...lists) => {
+    const seen = new Set();
+    const merged = [];
+    for (const list of lists) {
+      for (const t of list) {
+        const key = dedupeKey(t);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(t);
       }
     }
-    return [];
+    return merged.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   };
 
   const exportJsonFile = (txns) => {
-    const blob = new Blob([JSON.stringify(txns, null, 2)], { type: "application/json" });
+    const payload = {
+      format: "lm-bookmarklet-export/1",
+      institution: INSTITUTION,
+      label: "CFNA (Firestone)",
+      account_hint: "",
+      exported_at: new Date().toISOString(),
+      transactions: txns,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `cfna-lunchmoney-${new Date().toISOString().slice(0, 10)}.json`;
@@ -88,10 +160,13 @@
   };
 
   const run = async () => {
-    let txns = parseDoc(document);
-    if (!txns.length) {
-      txns = await fetchAndParseFallback();
-    }
+    // The statement pages carry far more history than the recent-activity
+    // widget, so they are always fetched rather than used only as a fallback.
+    const fromPage = parseDoc(document);
+    const fromHistory = await fetchAndParse("/cardholder/transaction-history");
+    const fromLatest = await fetchAndParse("/cardholder/latest-account-transactions");
+
+    const txns = mergeTransactions(fromPage, fromHistory, fromLatest);
 
     if (!txns.length) {
       alert("No CFNA transactions found.");
@@ -99,7 +174,12 @@
     }
 
     exportJsonFile(txns);
-    console.log("[CFNA exporter] exported", txns.length, "transactions", txns.slice(0, 5));
+    console.log("[CFNA exporter] exported", txns.length, "transactions", {
+      fromPage: fromPage.length,
+      fromHistory: fromHistory.length,
+      fromLatest: fromLatest.length,
+      sample: txns.slice(0, 5),
+    });
     alert(`Exported ${txns.length} transaction(s) to JSON.`);
   };
 

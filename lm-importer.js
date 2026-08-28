@@ -15,6 +15,74 @@
 
   const isV2Base = (apiBase) => /\/v2(?:$|\/)/.test(apiBase);
 
+  const slug = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+
+  // Exports made before the envelope format was introduced were bare arrays with
+  // no institution attached. Those files are still named by their exporter
+  // ("cfna-lunchmoney-2026-08-27.json"), so the leading token is a better guess
+  // than "unknown". The "lunchmoney" check keeps unrelated files from matching.
+  const institutionFromFileName = (fileName) => {
+    const m = String(fileName || "").match(/^([a-z0-9]+)[-_].*lunchmoney/i);
+    return m ? slug(m[1]) : "";
+  };
+
+  const readExport = (raw, fileName) => {
+    const parsed = JSON.parse(raw);
+
+    if (Array.isArray(parsed)) {
+      return {
+        institution: institutionFromFileName(fileName) || "unknown",
+        label: "",
+        accountHint: "",
+        transactions: parsed,
+        legacyFile: true,
+      };
+    }
+
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.transactions)) {
+      throw new Error("JSON must be an array of transactions or an export envelope with a `transactions` array.");
+    }
+
+    return {
+      institution: slug(parsed.institution) || "unknown",
+      label: String(parsed.label || ""),
+      accountHint: String(parsed.account_hint || ""),
+      transactions: parsed.transactions,
+      legacyFile: false,
+    };
+  };
+
+  const accountIdKey = ({ v2, institution, accountHint }) => {
+    const base = v2 ? KEYS.v2ManualAccountId : KEYS.v1AccountId;
+    const scope = [slug(institution), slug(accountHint)].filter(Boolean).join("__");
+    return scope ? `${base}__${scope}` : base;
+  };
+
+  // CFNA exports predate per-institution keys, so fall back to the old unscoped
+  // value rather than re-prompting people who already have one saved.
+  const readSavedAccountId = ({ v2, institution, accountHint }) => {
+    const base = v2 ? KEYS.v2ManualAccountId : KEYS.v1AccountId;
+    const scoped = localStorage.getItem(accountIdKey({ v2, institution, accountHint }));
+    if (scoped) return scoped;
+    if (institution === "cfna" || institution === "unknown") return localStorage.getItem(base) || "";
+    return "";
+  };
+
+  const promptForAccountId = ({ v2, institution, label, accountHint }) => {
+    const key = accountIdKey({ v2, institution, accountHint });
+    const current = readSavedAccountId({ v2, institution, accountHint });
+    const who = label || institution;
+    const field = v2 ? "manual_account_id" : "account_id";
+
+    const value = prompt(`Lunch Money ${field} for ${who} transactions`, current) || "";
+    if (value) localStorage.setItem(key, value);
+    return value;
+  };
+
   const summarizeExternalIds = (transactions) => {
     let missing = 0;
     const seen = new Set();
@@ -79,13 +147,13 @@
     });
 
   const getRawJson = async () => {
-    alert(`Please select the JSON file created by the exporter.
+    alert(`Please select the JSON file created by an exporter.
 
 If no file dialog appears, click this bookmark again and try once more.`);
 
     try {
       const file = await pickJsonFile();
-      return await readFileText(file);
+      return { raw: await readFileText(file), fileName: file.name || "" };
     } catch (pickerError) {
       throw new Error(
         `${pickerError?.message || pickerError}. If no file dialog appeared, click this bookmark again and retry.`
@@ -125,13 +193,23 @@ If no file dialog appears, click this bookmark again and try once more.`);
       return;
     }
 
-    let raw;
+    let input;
     try {
-      raw = await getRawJson();
+      input = await getRawJson();
     } catch (e) {
       alert(`Could not read JSON input: ${e?.message || e}`);
       return;
     }
+
+    let parsed;
+    try {
+      parsed = readExport(input.raw, input.fileName);
+    } catch (e) {
+      alert(`Could not read export file: ${e?.message || e}`);
+      return;
+    }
+
+    const { institution, label, accountHint, transactions } = parsed;
 
     const apiBase = getOrPrompt(
       KEYS.apiBase,
@@ -140,13 +218,7 @@ If no file dialog appears, click this bookmark again and try once more.`);
     );
     const v2 = isV2Base(apiBase);
 
-    const accountId = getOrPrompt(
-      v2 ? KEYS.v2ManualAccountId : KEYS.v1AccountId,
-      v2
-        ? "Lunch Money manual_account_id for imported transactions"
-        : "Lunch Money account_id for imported transactions"
-    );
-
+    const accountId = promptForAccountId({ v2, institution, label, accountHint });
     if (!accountId) {
       alert(v2 ? "Import cancelled: manual_account_id is required." : "Import cancelled: account_id is required.");
       return;
@@ -155,19 +227,6 @@ If no file dialog appears, click this bookmark again and try once more.`);
     const token = getOrPrompt(KEYS.token, "Lunch Money API token (Bearer)");
     if (!token) {
       alert("Import cancelled: API token is required.");
-      return;
-    }
-
-    let transactions;
-    try {
-      transactions = JSON.parse(raw);
-    } catch (_) {
-      alert("Input is not valid JSON.");
-      return;
-    }
-
-    if (!Array.isArray(transactions)) {
-      alert("JSON must be an array of transaction objects.");
       return;
     }
 
@@ -191,7 +250,7 @@ If no file dialog appears, click this bookmark again and try once more.`);
         : 0;
       console.log("[LM importer] success", result);
       alert(
-        `Import completed via ${result.url}.\nImported: ${importedCount}\nSkipped duplicates: ${skippedDuplicatesCount}`
+        `Import completed via ${result.url}.\nSource: ${label || institution}\nImported: ${importedCount}\nSkipped duplicates: ${skippedDuplicatesCount}`
       );
     } catch (e) {
       console.error("[LM importer] failed", e);

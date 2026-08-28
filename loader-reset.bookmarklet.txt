@@ -1,1 +1,1 @@
-javascript:(() => { ["lm_bookmarklet_cfna_exporter_src", "lm_bookmarklet_lm_importer_src"].forEach((k) => localStorage.removeItem(k)); alert("Cleared loader cache for CFNA Exporter and Lunch Money Importer."); })();
+javascript:(() => { ["lm_bookmarklet_cfna_exporter_src","lm_bookmarklet_sofi_exporter_src","lm_bookmarklet_lm_importer_src"].forEach((k) => localStorage.removeItem(k)); alert("Cleared loader cache for: CFNA Exporter, SoFi Exporter, Lunch Money Importer."); })();

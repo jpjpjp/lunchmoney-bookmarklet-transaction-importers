@@ -40,10 +40,18 @@ if (!fs.existsSync(inputPath)) {
 }
 
 const raw = fs.readFileSync(inputPath, "utf8");
-let txns = JSON.parse(raw);
-if (!Array.isArray(txns)) {
-  console.error("Input JSON must be an array of transactions.");
+const parsedInput = JSON.parse(raw);
+
+// Exporters emit an envelope; bare arrays are the pre-envelope format.
+const isEnvelope = parsedInput && !Array.isArray(parsedInput) && Array.isArray(parsedInput.transactions);
+if (!Array.isArray(parsedInput) && !isEnvelope) {
+  console.error("Input JSON must be an array of transactions or an export envelope with a `transactions` array.");
   process.exit(1);
+}
+
+let txns = isEnvelope ? parsedInput.transactions : parsedInput;
+if (isEnvelope) {
+  console.log(`Source: ${parsedInput.label || parsedInput.institution || "unknown"}`);
 }
 
 const summarizeExternalIds = (transactions) => {
