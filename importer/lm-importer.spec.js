@@ -2,7 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "lm-importer.js"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "lm-importer.js"), "utf8");
 
 const run = (fileContent, presetStorage, fileName = "export.json") =>
   new Promise((resolve) => {

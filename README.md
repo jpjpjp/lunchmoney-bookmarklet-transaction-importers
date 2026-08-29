@@ -15,8 +15,8 @@ intentionally a two-step process.
 
 | Institution | Exporter | How it reads transactions |
 |---|---|---|
-| CFNA (Firestone credit card) | [`cfna-exporter.js`](cfna-exporter.js) | Scrapes the recent-activity widget **and** every per-statement table |
-| SoFi | [`sofi-exporter.js`](sofi-exporter.js) | Calls SoFi's GraphQL API with your session cookie |
+| CFNA (Firestone credit card) | [`cfna-exporter.js`](exporters/cfna/cfna-exporter.js) | Scrapes the recent-activity widget **and** every per-statement table |
+| SoFi | [`sofi-exporter.js`](exporters/sofi/sofi-exporter.js) | Calls SoFi's GraphQL API with your session cookie |
 
 There is **one importer** for all institutions. Each export file records which
 institution it came from, and the importer remembers a separate Lunch Money
@@ -24,6 +24,20 @@ account id per institution and per source account.
 
 Need Help?
 - Join the conversation in the [Lunch Money Bookmarklets Channel on Discord](https://discord.com/channels/842337014556262411/1480708918391996588)
+
+## Repository layout
+
+```
+exporters/<institution>/   one directory per institution: source, generated
+                           bookmarklets, and its spec
+importer/                  the single importer shared by every institution,
+                           plus the optional CLI
+tools/                     build and test scripts
+*-reset.bookmarklet.txt    cross-cutting reset bookmarks
+```
+
+Everything for one institution lives in its own directory, so a new-institution
+change touches exactly one place.
 
 ## Recommended Setup (No Clone)
 
@@ -33,9 +47,9 @@ This is the most reliable setup and the one used in testing. The loader bookmark
 stays fixed; it reads the `.js` file from disk and caches it in `localStorage`.
 
 1. Open the loader files you need in GitHub (no clone needed) and click **Raw**:
-- [`cfna-exporter.loader.bookmarklet.txt`](cfna-exporter.loader.bookmarklet.txt)
-- [`sofi-exporter.loader.bookmarklet.txt`](sofi-exporter.loader.bookmarklet.txt)
-- [`lm-importer.loader.bookmarklet.txt`](lm-importer.loader.bookmarklet.txt)
+- [`cfna-exporter.loader.bookmarklet.txt`](exporters/cfna/cfna-exporter.loader.bookmarklet.txt)
+- [`sofi-exporter.loader.bookmarklet.txt`](exporters/sofi/sofi-exporter.loader.bookmarklet.txt)
+- [`lm-importer.loader.bookmarklet.txt`](importer/lm-importer.loader.bookmarklet.txt)
 2. Copy each full line and save as a bookmark:
 - `CFNA Export (Loader)`
 - `SoFi Export (Loader)`
@@ -59,9 +73,9 @@ If the file picker does not open on the first click, run `LM Import (Loader)` ag
 
 Single bookmarklets with no loader:
 
-- [`cfna-exporter.bookmarklet.txt`](cfna-exporter.bookmarklet.txt)
-- [`sofi-exporter.bookmarklet.txt`](sofi-exporter.bookmarklet.txt)
-- [`lm-importer.bookmarklet.txt`](lm-importer.bookmarklet.txt)
+- [`cfna-exporter.bookmarklet.txt`](exporters/cfna/cfna-exporter.bookmarklet.txt)
+- [`sofi-exporter.bookmarklet.txt`](exporters/sofi/sofi-exporter.bookmarklet.txt)
+- [`lm-importer.bookmarklet.txt`](importer/lm-importer.bookmarklet.txt)
 
 They are shorter but must be re-copied every time a source file changes, and can
 fail in some browsers when bookmarklet strings are truncated or edited.
@@ -109,7 +123,7 @@ Verify what is cached at any time:
 
 1. Open CFNA and log in.
 2. Click `CFNA Export (Loader)`.
-3. If prompted, install [`cfna-exporter.js`](cfna-exporter.js).
+3. If prompted, install [`cfna-exporter.js`](exporters/cfna/cfna-exporter.js).
 4. Save the exported JSON file.
 
 Notes:
@@ -127,7 +141,7 @@ Notes:
 
 1. Log in to SoFi and open any `www.sofi.com` page.
 2. Click `SoFi Export (Loader)`.
-3. If prompted, install [`sofi-exporter.js`](sofi-exporter.js).
+3. If prompted, install [`sofi-exporter.js`](exporters/sofi/sofi-exporter.js).
 4. If you have more than one SoFi account, pick which one to export. **The
    choice is remembered**, so the picker only appears once.
 5. Save the exported JSON file.
@@ -162,7 +176,7 @@ the date it settled, so spending falls in the month you spent it.
 - CFNA shows a single date, so there is nothing to distinguish.
 
 To use the posted date instead, set `DATE_SOURCE = "posted"` at the top of
-[`sofi-exporter.js`](sofi-exporter.js).
+[`sofi-exporter.js`](exporters/sofi/sofi-exporter.js).
 
 ## Export file format
 
@@ -173,7 +187,7 @@ Exporters emit an envelope so the importer knows what it is reading:
   "format": "lm-bookmarklet-export/1",
   "institution": "sofi",
   "label": "Card Account (...7769)",
-  "account_hint": "706102057769",
+  "account_hint": "700000007769",
   "exported_at": "2026-08-28T14:00:00.000Z",
   "transactions": [ ... ]
 }
@@ -194,7 +208,7 @@ app, plus one object named for the institution:
   "source_version": "2.0.0",
   "institution": "sofi",
   "sofi": {
-    "account_id": "706102057769",
+    "account_id": "700000007769",
     "account_type": "CardAccount",
     "posted_date": "2026-08-25",
     "state": "POSTED",
@@ -214,7 +228,7 @@ app, plus one object named for the institution:
   "source_version": "2.0.0",
   "institution": "cfna",
   "cfna": {
-    "cardholder": "JP SHIPHERD",
+    "cardholder": "A CARDHOLDER",
     "raw_date": "08/22/2025",
     "raw_amount": "$114.45"
   }
@@ -240,7 +254,7 @@ The importer saves the Lunch Money account id under a key scoped to the
 institution and source account, for example:
 
 ```
-lm_import_v2_manual_account_id__sofi__706102057769
+lm_import_v2_manual_account_id__sofi__700000007769
 ```
 
 Each card or bank account is asked about once and remembered separately.
@@ -314,20 +328,20 @@ Use this console fallback to install importer source manually:
 })();
 ```
 
-Then choose [`lm-importer.js`](lm-importer.js) and retry `LM Import (Loader)`.
+Then choose [`lm-importer.js`](importer/lm-importer.js) and retry `LM Import (Loader)`.
 
 ## Advanced (maintainers)
 
 Edit these source files:
 
-- [`cfna-exporter.js`](cfna-exporter.js)
-- [`sofi-exporter.js`](sofi-exporter.js)
-- [`lm-importer.js`](lm-importer.js)
+- [`cfna-exporter.js`](exporters/cfna/cfna-exporter.js)
+- [`sofi-exporter.js`](exporters/sofi/sofi-exporter.js)
+- [`lm-importer.js`](importer/lm-importer.js)
 
 Rebuild generated bookmarklet files:
 
 ```bash
-node make-bookmarklet.js
+node tools/make-bookmarklet.js
 ```
 
 `make-bookmarklet.js` generates all `*.bookmarklet.txt` files, refuses to write
@@ -337,10 +351,10 @@ with `PROJECT_VERSION`.
 ### Tests
 
 ```bash
-node run-tests.js
+node tools/run-tests.js
 ```
 
-Each `test/*.spec.js` runs in its own process, stubs the browser globals an
+Each `*.spec.js` sits beside the code it exercises, runs in its own process, stubs the browser globals an
 exporter or the importer expects, feeds it a synthetic fixture, and asserts on
 the JSON it produces. There are no dependencies and no test framework.
 
@@ -355,7 +369,7 @@ Money column or invents a value the institution did not supply.
 
 ### Versioning
 
-`PROJECT_VERSION` in [`make-bookmarklet.js`](make-bookmarklet.js) is the version
+`PROJECT_VERSION` in [`make-bookmarklet.js`](tools/make-bookmarklet.js) is the version
 of the project. Every exporter that stamps `source_version` into
 `custom_metadata` declares a matching `SOURCE_VERSION`. Because the loader flow
 reads the raw `.js` from disk, the version cannot be injected at build time, so
@@ -366,12 +380,15 @@ Bump the major version when adding an institution or changing the
 
 ### Adding an institution
 
-1. Write `<name>-exporter.js`. It must emit the envelope described above with a
-   unique `institution` value, an `account_hint` when the source has a stable
-   account identifier, and `SOURCE_VERSION` matching `PROJECT_VERSION`.
-2. Add one entry to the `EXPORTERS` array at the top of
-   [`make-bookmarklet.js`](make-bookmarklet.js).
-3. Run `node make-bookmarklet.js`.
+1. Create `exporters/<name>/` and write `<name>-exporter.js` in it. The exporter
+   must emit the envelope described above with a unique `institution` value, an
+   `account_hint` when the source has a stable account identifier, and
+   `SOURCE_VERSION` matching `PROJECT_VERSION`.
+2. Add `exporters/<name>/<name>-exporter.spec.js` with a **synthetic** fixture.
+3. Add one entry to the `EXPORTERS` array at the top of
+   [`make-bookmarklet.js`](tools/make-bookmarklet.js), giving its `dir` and
+   `source`.
+4. Run `node tools/make-bookmarklet.js` and `node tools/run-tests.js`.
 
 Loader storage keys, generated filenames, and the reset bookmarklets are all
 derived from that array. The importer needs no changes.
@@ -379,7 +396,7 @@ derived from that array. The importer needs no changes.
 ### Optional CLI import
 
 ```bash
-LM_TOKEN='YOUR_TOKEN' LM_MANUAL_ACCOUNT_ID='123456' LM_BASE='https://api.lunchmoney.dev/v2' node import-lunchmoney.js ~/Downloads/sofi-706102057769-lunchmoney-YYYY-MM-DD.json
+LM_TOKEN='YOUR_TOKEN' LM_MANUAL_ACCOUNT_ID='123456' LM_BASE='https://api.lunchmoney.dev/v2' node importer/import-lunchmoney.js ~/Downloads/sofi-<account-id>-lunchmoney-YYYY-MM-DD.json
 ```
 
 The CLI accepts both envelope files and bare arrays.

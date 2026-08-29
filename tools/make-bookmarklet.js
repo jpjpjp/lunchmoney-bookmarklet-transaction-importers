@@ -3,7 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const root = __dirname;
+// This script lives in tools/, so the repo root is one level up.
+const root = path.join(__dirname, "..");
 
 // The version of this project as a whole. Every exporter that stamps
 // `source_version` into custom_metadata must agree with it; the build fails
@@ -14,14 +15,23 @@ const PROJECT_VERSION = "2.0.0";
 // generated bookmarklet filenames, and the reset bookmarklets are all derived
 // from this list, so adding an institution means adding one entry.
 const EXPORTERS = [
-  { id: "cfna", label: "CFNA Exporter", source: "cfna-exporter.js" },
-  { id: "sofi", label: "SoFi Exporter", source: "sofi-exporter.js" },
+  { id: "cfna", label: "CFNA Exporter", dir: "exporters/cfna", source: "cfna-exporter.js" },
+  { id: "sofi", label: "SoFi Exporter", dir: "exporters/sofi", source: "sofi-exporter.js" },
 ];
 
-const IMPORTER = { key: "lm_bookmarklet_lm_importer_src", label: "Lunch Money Importer", source: "lm-importer.js" };
+const IMPORTER = {
+  key: "lm_bookmarklet_lm_importer_src",
+  label: "Lunch Money Importer",
+  dir: "importer",
+  source: "lm-importer.js",
+};
 
 const exporterKey = (id) => `lm_bookmarklet_${id}_exporter_src`;
-const outName = (source, suffix) => `${source.replace(/\.js$/, "")}${suffix}`;
+
+// Generated bookmarklets sit beside the source they came from, so everything
+// for one institution lives in a single directory.
+const outName = ({ dir, source }, suffix) => path.join(dir, `${source.replace(/\.js$/, "")}${suffix}`);
+const sourcePath = ({ dir, source }) => path.join(dir, source);
 
 // Settings the importer persists. Account ids are stored per institution and
 // account, so they are matched by prefix rather than exact name.
@@ -228,7 +238,8 @@ const writeBookmarklet = (source, outFile) => {
   console.log(`Wrote ${outFile} (length ${bookmarklet.length})`);
 };
 
-const checkVersion = (sourceFile) => {
+const checkVersion = (entry) => {
+  const sourceFile = sourcePath(entry);
   const source = fs.readFileSync(path.join(root, sourceFile), "utf8");
   const match = source.match(/const SOURCE_VERSION = "([^"]+)"/);
   if (!match) return; // Exporters that emit no metadata do not declare one.
@@ -243,22 +254,22 @@ const buildFromFile = (sourceFile, outFile) =>
   writeBookmarklet(fs.readFileSync(path.join(root, sourceFile), "utf8"), outFile);
 
 for (const exporter of EXPORTERS) {
-  checkVersion(exporter.source);
-  buildFromFile(exporter.source, outName(exporter.source, ".bookmarklet.txt"));
+  checkVersion(exporter);
+  buildFromFile(sourcePath(exporter), outName(exporter, ".bookmarklet.txt"));
   writeBookmarklet(
     loaderSource({
       storageKey: exporterKey(exporter.id),
       displayName: exporter.label,
       expectedFileName: exporter.source,
     }),
-    outName(exporter.source, ".loader.bookmarklet.txt")
+    outName(exporter, ".loader.bookmarklet.txt")
   );
 }
 
-buildFromFile(IMPORTER.source, outName(IMPORTER.source, ".bookmarklet.txt"));
+buildFromFile(sourcePath(IMPORTER), outName(IMPORTER, ".bookmarklet.txt"));
 writeBookmarklet(
   loaderSource({ storageKey: IMPORTER.key, displayName: IMPORTER.label, expectedFileName: IMPORTER.source }),
-  outName(IMPORTER.source, ".loader.bookmarklet.txt")
+  outName(IMPORTER, ".loader.bookmarklet.txt")
 );
 
 writeBookmarklet(resetLoaderSource, "loader-reset.bookmarklet.txt");
