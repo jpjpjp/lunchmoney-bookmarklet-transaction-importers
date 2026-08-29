@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "cfna-exporter.js"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "cfna-exporter.js"), "utf8");
 
 const mkRow = ({ date, desc, amt, cardholder, details, text }) => ({
   innerText: text,

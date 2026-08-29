@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const src = fs.readFileSync(path.join(__dirname, "..", "sofi-exporter.js"), "utf8");
+const src = fs.readFileSync(path.join(__dirname, "sofi-exporter.js"), "utf8");
 
 const TXNS = [
   { id: "SE-1000000001", description: "EXAMPLE  GROCERY #001, SPRINGFIELD, IL", state: "POSTED", displayType: "OTHER",
