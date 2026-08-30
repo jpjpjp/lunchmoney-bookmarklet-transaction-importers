@@ -256,6 +256,7 @@ What it takes:
 Worth knowing before you start:
 
 - **You do not need permission or a plan.** Open a PR, or ask in [Discord](https://discord.com/channels/842337014556262411/1480708918391996588) first if you would rather talk it through.
+- **You do not have to write it by hand.** An AI coding agent can do most of the work if you can log into the bank; [CONTRIBUTING.md](CONTRIBUTING.md#working-with-an-agent) explains how, and what to watch for.
 - **Nobody can test your bank but you.** Exporters are accepted on the strength of readable code and a good test rather than a maintainer reproducing your setup, so say plainly in the PR what you verified and what you could not. Honest gaps are fine.
 - **The hard parts are documented.** Amount signs differ between banks, deduplication depends on getting transaction ids right, and pending transactions will bite you. [CONTRIBUTING.md](CONTRIBUTING.md) has a Traps section covering each, written from mistakes this project already made.
 

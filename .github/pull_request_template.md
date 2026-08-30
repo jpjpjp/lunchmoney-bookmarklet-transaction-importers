@@ -22,9 +22,12 @@ Delete this section if it does not apply.
 - [ ] Spec added with a **synthetic** fixture — no real account data anywhere in
       the diff (ids, merchants, amounts, names)
 - [ ] `node tools/run-tests.js` passes
+- [ ] `node tools/check-exporter-safety.js` passes
 - [ ] `node tools/make-bookmarklet.js` runs and generated files are committed
 
 ## Safety
+
+Most of these are checked by `node tools/check-exporter-safety.js`; confirm them anyway.
 
 - [ ] No network calls to anything but the institution's own origin
 - [ ] No `eval`, `Function()`, dynamic `import()`, or injected `<script>` tags
@@ -35,3 +38,6 @@ Delete this section if it does not apply.
 
 <!-- Whether you ran this against a live account, and what you saw.
      Say so plainly if you could not test some path. -->
+
+<!-- If an agent did most of the work, say so. It is not held against the PR;
+     it just tells a reviewer where to look harder. -->

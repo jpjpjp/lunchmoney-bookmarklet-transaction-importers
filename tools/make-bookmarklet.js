@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 // This script lives in tools/, so the repo root is one level up.
 const root = path.join(__dirname, "..");
@@ -252,6 +253,10 @@ const checkVersion = (entry) => {
 
 const buildFromFile = (sourceFile, outFile) =>
   writeBookmarklet(fs.readFileSync(path.join(root, sourceFile), "utf8"), outFile);
+
+// Safety checks run first: a build should not produce an installable
+// bookmarklet from source that fails them.
+execFileSync(process.execPath, [path.join(__dirname, "check-exporter-safety.js")], { stdio: "inherit" });
 
 for (const exporter of EXPORTERS) {
   checkVersion(exporter);

@@ -4,6 +4,8 @@ This project turns bank websites Lunch Money cannot sync into JSON that Lunch Mo
 
 The [README](README.md) covers using the bookmarklets. This document covers how they work and what a new exporter has to do.
 
+**You do not have to do this by hand.** If you use an AI coding agent, it can do most of the work — see [Working with an agent](#working-with-an-agent). Writing an exporter yourself is entirely fine too; the rest of this document is written for that.
+
 ## How it works
 
 Banks block direct API calls from their pages to Lunch Money, so the flow is deliberately two steps:
@@ -177,7 +179,30 @@ An exporter runs with full page privileges on a logged-in banking session, and a
 - **No storage writes outside the documented `lm_export_*` keys.**
 - **Readable source.** Not minified, not obfuscated, no base64 blobs. The generated `.bookmarklet.txt` is minified by the build; the `.js` you write is what gets reviewed.
 
-Exporters are reviewed before merging, but review is not a guarantee. Anyone installing one is trusting its author and this project's maintainer.
+`node tools/check-exporter-safety.js` enforces the mechanical parts of this — absolute URLs, dynamic code execution, script injection, storage writes outside `lm_export_*`, and encoded blobs — across everything under `exporters/` and `templates/`. It also checks that each file parses. The build runs it first and refuses to produce a bookmarklet from source that fails.
+
+It cannot tell whether an exporter *works*. It can tell that an exporter cannot quietly send someone's banking session somewhere else, which is the property a reviewer has the hardest time confirming by eye.
+
+Exporters are reviewed before merging, but neither review nor the checker is a guarantee. Anyone installing one is trusting its author and this project's maintainer.
+
+## Working with an agent
+
+An exporter is a good fit for an AI coding agent, because the work splits cleanly: **you have an account at the bank and it does not**, and it has the patience for reverse-engineering a transactions page. If you would rather not write JavaScript, this is a reasonable way to contribute.
+
+This is an option, not a requirement, and it is not a shortcut past review — an agent-written exporter is held to exactly the same bar as a hand-written one.
+
+[AGENTS.md](AGENTS.md) is a runbook written for the agent. Point it there:
+
+> Read AGENTS.md and CONTRIBUTING.md in this repository, then help me add an exporter for <my bank>.
+
+What to expect:
+
+- **You log in, always.** A well-behaved agent will not type your password or an MFA code, and will not click through a CAPTCHA. It works inside the session after you have signed in.
+- **Your transaction data will pass through the agent's context** while it works out how the page is structured. That is unavoidable when writing a scraper, and worth knowing before you start.
+- **It will ask you things only you can answer.** Whether a given row is a purchase or a payment, whether the list looks complete, whether the account is already syncing into Lunch Money another way. Answer carefully — the sign question in particular is one nothing in the data reveals, and getting it wrong inverts every amount.
+- **Test fixtures will be invented, not copied.** Nothing real should reach the repository.
+
+If the agent goes off the rails — pasting real transactions into a test, calling an outside URL, wanting to import into your live account to "check" — stop it. Those are the specific things the runbook forbids, and `node tools/check-exporter-safety.js` catches some of them mechanically.
 
 ## Adding an institution
 
@@ -185,7 +210,7 @@ Exporters are reviewed before merging, but review is not a guarantee. Anyone ins
 2. Fill in the three TODOs: fetch the raw transactions, map one to the Lunch Money shape, build the metadata block.
 3. Add an entry to `EXPORTERS` at the top of [`tools/make-bookmarklet.js`](tools/make-bookmarklet.js) with your `id`, `label`, `dir`, and `source`.
 4. Run `node tools/make-bookmarklet.js` and commit the generated files.
-5. Run `node tools/run-tests.js`.
+5. Run `node tools/run-tests.js` and `node tools/check-exporter-safety.js`.
 6. Open a PR and fill in the checklist.
 
 The loader storage keys, generated filenames, and the reset bookmarklets are all derived from that `EXPORTERS` entry. The importer needs no changes.
